@@ -1,0 +1,480 @@
+import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.lib.Repository
+
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath 'org.eclipse.jgit:org.eclipse.jgit:3.2.0.201312181205-r' }
+}
+
+defaultTasks 'binaryCompatibilityTest'
+
+def REMOTE_URL = "https://github.com/orientechnologies/orientdb.git"
+def ORIENTDB_SOURCE_DIR = new File("workspace/orientdb")
+def DISTRIBUITION_DIR = new File("workspace/distribution")
+
+def TEST_DB_DIR = new File("workspace/distribution/database")
+def LIB_DIR = new File("workspace/distribution/lib")
+
+def minimalVersion = "1.7-rc2"
+def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
+
+/*
+ * Test to ensure binary compatibility between different releases of OrientDB.
+ *
+ * It uses following algorithm:
+ * 1. get list of tags from git repository and create list of releases which contains 2 latest minor versions.
+ * so if we have releases 1.5, 1.5.1, 1.6.1, 1.6.2, 1.7, 1.7.1 we will have to test all 1.6.1, 1.6.2, 1.7, 1.7.1 releases.
+ * if we have 1.5, 1.5.1, 1.6.1, 1.6.2, 1.7, 1.7.1, 2.0  we will have to test 1.7, 1.7.1, 2.0 releases and if we have 1.5, 1.5.1, 1.6.1, 1.6.2, 1.7, 1.7.1, 2.0, 2.1
+ * we will test 2.0, 2.1 releases.
+ * 2. Checkout first release which is going to be tested.
+ * 3. run test-plocal task on this version. but do not delete test database and exported database
+ * (it will contain all existing data structures in very different combinations).
+ * 4. checkout next release and do db import of exported database and compare content of imported and original database.
+ * 5. checkout releases and execute step 4 till all releases will be tested.
+ * 6. do the same with snapshot.
+ */
+task binaryCompatibilityTest(dependsOn: ['runCompatibilityTestsForReleasesVersions', 'runCompatibilityTestsForSnapshot']) << {
+}
+
+/*
+ * Compiles and run binary compatibility test on latest snapshot version of develop branch.
+ * Sources of develop branch are not compiled here. It is done in other task.
+ */
+task runCompatibilityTestsForSnapshot(dependsOn: ['generateBinaryTestsDatabase', 'createSnapshotDistribution']) << {
+    if (versionsToTest.isEmpty())
+        throw new StopExecutionException("No versions to test")
+
+    def File exportedDbPath = new File("workspace/distribution/db.export.gz")
+    println "Start binary compatibility test for latest snapshot"
+
+    def File classesDir = new File("workspace/distribution/classes")
+    if (classesDir.exists())
+        if (!classesDir.deleteDir())
+            throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
+
+
+    if (!classesDir.mkdirs())
+        throw new GradleScriptException("Can not create directory ${classesDir.absolutePath}", null)
+
+    def File versionLibDir = new File("workspace/distribution/lib/SNAPSHOT")
+
+    def classpath = ant.path {
+        fileset(dir: "${versionLibDir.absolutePath}") {
+            include(name: "*.jar")
+        }
+        pathelement(path: "${classesDir.absolutePath}")
+    }
+
+    ant.javac(destdir: "${classesDir.absolutePath}", srcdir: "src", classpath: "${classpath}", includeAntRuntime: false)
+
+    File newDBDir = new File("workspace/distribution/exportedDatabase")
+    if (newDBDir.exists())
+        if (!newDBDir.deleteDir())
+            throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
+
+
+    Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
+            "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+    process.consumeProcessOutput((Appendable) System.out, System.err)
+    result = process.waitFor()
+    if (result != 0)
+        throw new GradleScriptException("Binary compatibility test for snapshot version was failed", null)
+}
+
+/*
+ * Compiles and run binary compatibility test on all released versions.
+ * Sources of this versions are not compiled here. It is done in other task.
+ */
+task runCompatibilityTestsForReleasesVersions(dependsOn: ['generateBinaryTestsDatabase', 'createReleasedVersionsDistributions']) << {
+    if (versionsToTest.isEmpty())
+        throw new StopExecutionException("No versions to test")
+
+    def File exportedDbPath = new File("workspace/distribution/db.export.gz")
+    for (int i = 1; i < versionsToTest.size(); i++) {
+        def OrientDBVersion version = versionsToTest.get(i)
+        println "Start binary compatibility test for version ${version.tagName}"
+
+        def File classesDir = new File("workspace/distribution/classes")
+        if (classesDir.exists())
+            if (!classesDir.deleteDir())
+                throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
+
+
+        if (!classesDir.mkdirs())
+            throw new GradleScriptException("Can not create directory ${classesDir.absolutePath}", null)
+
+        def File versionLibDir = new File("workspace/distribution/lib/${version.tagName}")
+
+        def classpath = ant.path {
+            fileset(dir: "${versionLibDir.absolutePath}") {
+                include(name: "*.jar")
+            }
+            pathelement(path: "${classesDir.absolutePath}")
+        }
+
+        ant.javac(destdir: "${classesDir.absolutePath}", srcdir: "src", classpath: "${classpath}", includeAntRuntime: false)
+
+        File newDBDir = new File("workspace/distribution/exportedDatabase")
+        if (newDBDir.exists())
+            if (!newDBDir.deleteDir())
+                throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
+
+
+        Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
+                "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+        process.consumeProcessOutput((Appendable) System.out, System.err)
+        result = process.waitFor()
+        if (result != 0)
+            throw new GradleScriptException("Binary compatibility test for version ${version.tagName} was failed", null)
+    }
+}
+
+/*
+ * Create OrientDB distribution for latest version from develop branch.
+ */
+task createSnapshotDistribution(dependsOn: ['cleanup', 'fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+    if (versionsToTest.isEmpty())
+        throw new StopExecutionException("No versions to test")
+
+    println "Create binary distribution for latest snapshot"
+
+    runShellScript(ORIENTDB_SOURCE_DIR, "git checkout develop")
+    runShellScript(ORIENTDB_SOURCE_DIR, "git pull")
+    runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
+
+    File distributionTarget = new File(ORIENTDB_SOURCE_DIR, "distribution/target")
+    distributionDirList = distributionTarget.listFiles(new FileFilter() {
+        boolean accept(File pathname) {
+            return pathname.name.startsWith("orientdb-community-") && pathname.name.endsWith("-distribution.dir")
+        }
+    })
+
+    if (distributionDirList == null || distributionDirList.length != 1)
+        throw new GradleScriptException("Can not find distribution directory for latest snapshot", null)
+
+    distributionDirList = distributionDirList[0].listFiles(new FileFilter() {
+        boolean accept(File pathname) {
+            return pathname.name.startsWith("orientdb-community-")
+        }
+    })
+
+    if (distributionDirList == null || distributionDirList.length != 1)
+        throw new GradleScriptException("Can not find distribution directory for latest snapshot", null)
+
+    File distributionLibDir = new File(distributionDirList[0], "lib")
+
+    if (!DISTRIBUITION_DIR.exists())
+        throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
+
+    File snapshotLibDir = new File(LIB_DIR, "SNAPSHOT")
+    if (!snapshotLibDir.mkdir())
+        throw new GradleScriptException("Can not create directory ${snapshotLibDir.absolutePath}", null)
+
+    ant.copy(todir: snapshotLibDir.absolutePath) {
+        fileset(dir: distributionLibDir.absolutePath)
+    }
+
+    File exportedDbPath = new File("workspace/distribution/db.export.gz")
+    if (!exportedDbPath.exists())
+        throw new GradleScriptException("File ${exportedDbPath.absolutePath} does not exist", null)
+}
+
+/*
+ * Create OrientDB distributions for all released versions.
+ */
+task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+    if (versionsToTest.isEmpty())
+        throw new StopExecutionException("No versions to test")
+
+    File libDir = new File(DISTRIBUITION_DIR, "lib")
+    if (!libDir.mkdir())
+        throw new GradleScriptException("Can not create directory ${libDir.absolutePath}", null)
+
+    for (OrientDBVersion version in versionsToTest) {
+        println "Create binary distribution for version ${version.tagName}"
+        runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${version.tagName}")
+        runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
+
+        File distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}-distribution.dir/orientdb-community-${version.tagName}/lib")
+
+        if (!distributionLibDir.exists())
+            throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
+
+        File versionLibDir = new File(libDir, "${version.tagName}")
+        if (!versionLibDir.mkdir())
+            throw new GradleScriptException("Can not create directory ${versionLibDir.absolutePath}", null)
+
+        ant.copy(todir: versionLibDir.absolutePath) {
+            fileset(dir: distributionLibDir.absolutePath)
+        }
+    }
+}
+
+/*
+ * Run "ant clean test-plocal" tasks on first OrientDB release (which is chosen to be tested) to create test database which will be used
+ * for binary compatibility tests.
+ */
+task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+    if (versionsToTest.isEmpty())
+        throw new StopExecutionException("No versions to test")
+
+    runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${versionsToTest.get(0).tagName}")
+
+    println "Creating database for binary compatibility tests"
+    runShellScript(ORIENTDB_SOURCE_DIR, "ant clean test-plocal")
+
+    File testDB = new File(ORIENTDB_SOURCE_DIR.parentFile, "releases/orientdb-community-${versionsToTest.get(0).tagName}/databases/demo")
+    if (!testDB.exists())
+        throw new GradleScriptException("Test database can not be found under the path ${testDB.absolutePath}", null)
+
+    File databaseDir = new File(DISTRIBUITION_DIR, "database")
+    if (!databaseDir.mkdir())
+        throw new GradleScriptException("Can create directory ${databaseDir.absolutePath}", null)
+
+    println "Copy tests database in distribution directory ${databaseDir.absolutePath}"
+    ant.copy(todir: databaseDir.absolutePath) {
+        fileset(dir: testDB.absolutePath)
+    }
+
+    println "Copy exported tests database in  distribution directory ${databaseDir.absolutePath}"
+    File exportedDb = new File(ORIENTDB_SOURCE_DIR, "tests/target/db.export.gz")
+    if (!exportedDb.exists())
+        throw new GradleScriptException("File ${exportedDb.absolutePath} does not exist", null)
+
+    ant.copy(todir: DISTRIBUITION_DIR.absolutePath) {
+        fileset(file: exportedDb.absolutePath)
+    }
+}
+
+task cleanup << {
+    File workspaceDir = new File("workspace")
+    if (!workspaceDir.exists())
+        if (!workspaceDir.mkdir())
+            throw new GradleScriptException("Can not delete directory ${workspaceDir.absolutePath}", null)
+
+    File releasesDir = new File("workspace/releases")
+    if (releasesDir.exists())
+        if (!releasesDir.deleteDir())
+            throw new GradleScriptException("Can not delete directory ${releasesDir.absolutePath}", null)
+
+    File distributionDir = new File("workspace/distribution")
+    if (distributionDir.exists())
+        if (!distributionDir.deleteDir())
+            throw new GradleScriptException("Can not delete directory ${distributionDir.absolutePath}", null)
+
+    println "Recreating distribution directory"
+
+    distributionDir = new File("workspace/distribution")
+    if (distributionDir.exists())
+        if (!distributionDir.deleteDir())
+            throw new GradleScriptException("Can not delete directory ${distributionDir.absolutePath}", null)
+
+    if (!distributionDir.mkdirs())
+        throw new GradleScriptException("Can create directory ${distributionDir.absolutePath}", null)
+}
+
+/*
+ * Fetches list of tags from OrientDB repository to form list of releases to test on binary compatibility feature.
+ */
+task fetchVersionsToTest << {
+    println "Fetch tag names from : ${REMOTE_URL} \n"
+
+    def tags = Git.lsRemoteRepository().setTags(true)
+            .setRemote(REMOTE_URL)
+            .call();
+
+    println "Fetched tags list : ${tags}\n"
+
+    def TreeSet<OrientDBVersion> versions = new TreeSet<OrientDBVersion>(Collections.reverseOrder())
+    def OrientDBVersion lowerVersion = new OrientDBVersion(minimalVersion)
+
+    println "Creating of list of versions which will be tested on binary compatibility ..."
+    for (tag in tags) {
+        def shortenTagName = Repository.shortenRefName(tag.getName())
+        if (isVersionTag(shortenTagName)) {
+            println "${shortenTagName} is a relase tag."
+            def OrientDBVersion version = new OrientDBVersion(shortenTagName)
+            if (version.compareTo(lowerVersion) >= 0)
+                versions.add(version)
+            else
+                println "Version ${shortenTagName} is skipped because it is lower than  ${lowerVersion.tagName}"
+
+        }
+    }
+
+
+
+    def amountOfMinorVersions = 0
+
+    def lastMinorVersion = -1
+    def lastMajotVersion = -1
+
+    for (OrientDBVersion version in versions) {
+        if (version.minorVersion != lastMinorVersion || version.majorVersion != lastMajotVersion) {
+            amountOfMinorVersions++;
+            lastMinorVersion = version.minorVersion
+            lastMajotVersion = version.majorVersion
+        }
+        if (amountOfMinorVersions > 2)
+            break;
+
+        versionsToTest.add(version)
+    }
+
+    Collections.reverse(versionsToTest)
+
+    println "\nFollowing versions will be tested on binary compatibility ${versionsToTest.tagName}\n"
+}
+
+task cloneSourcesIfNeeded(dependsOn: 'cleanup') << {
+    File srcPath = new File("workspace/orientdb")
+    if (!srcPath.exists())
+        runShellScript(srcPath.parentFile, "git clone ${REMOTE_URL}")
+}
+
+private void runShellScript(File dir, String command) {
+    String[] cmd = ["sh", "-c", "cd ${dir.absolutePath} && ${command}"];
+    Process p = Runtime.getRuntime().exec(cmd);
+    p.consumeProcessOutput((Appendable) System.out, System.err)
+    res = p.waitFor()
+    if (res != 0)
+        throw new GradleScriptException("Error during execution of command ${cmd}", null)
+
+}
+
+private boolean isVersionTag(tagName) {
+    if (tagName.isInteger())
+        return true
+
+    qualifierIndex = tagName.indexOf('-')
+
+    firstIndex = tagName.indexOf('.')
+    if (firstIndex <= 0)
+        return false;
+
+    firsIndexPart = tagName.substring(0, firstIndex)
+    if (!firsIndexPart.isInteger())
+        return false
+
+    secondIndex = tagName.indexOf('.', firstIndex + 1);
+    secondIndexPart = null
+
+    if (secondIndex > 0)
+        secondIndexPart = tagName.substring(firstIndex + 1, secondIndex)
+    else if (qualifierIndex > 0)
+        secondIndexPart = tagName.substring(firstIndex + 1, qualifierIndex)
+    else
+        secondIndexPart = tagName.substring(firstIndex + 1)
+
+    if (!secondIndexPart.isInteger())
+        return false
+
+    if (secondIndex < 0)
+        return true
+
+    thirdIndexPart = null
+    if (qualifierIndex > 0)
+        thirdIndexPart = tagName.substring(secondIndex + 1, qualifierIndex)
+    else
+        thirdIndexPart = tagName.substring(secondIndex + 1)
+
+    if (thirdIndexPart.isInteger())
+        return true
+
+    return false
+}
+
+final class OrientDBVersion implements Comparable<OrientDBVersion> {
+    final int majorVersion;
+    final int minorVersion;
+    final int microVersion;
+    final String qualifier;
+
+    final String tagName;
+
+
+    OrientDBVersion(tagName) {
+        this.tagName = tagName
+
+        def qualifierIndex = tagName.indexOf('-')
+        if (qualifierIndex > 0) {
+            qualifier = tagName.substring(qualifierIndex + 1)
+            tagName = tagName.substring(0, qualifierIndex)
+        } else
+            qualifier = ""
+
+
+        def firstIndex = tagName.indexOf('.')
+
+        if (firstIndex < 0) {
+            majorVersion = tagName.toInteger()
+            minorVersion = 0
+            microVersion = 0
+        } else {
+            def secondIndex = tagName.indexOf('.', firstIndex + 1)
+
+            if (secondIndex < 0) {
+                majorVersion = tagName.substring(0, firstIndex).toInteger()
+                minorVersion = tagName.substring(firstIndex + 1).toInteger()
+                microVersion = 0
+            } else {
+                majorVersion = tagName.substring(0, firstIndex).toInteger()
+                minorVersion = tagName.substring(firstIndex + 1, secondIndex).toInteger()
+                microVersion = tagName.substring(secondIndex + 1).toInteger()
+            }
+        }
+    }
+
+
+    int compareTo(OrientDBVersion o) {
+        if (majorVersion > o.majorVersion)
+            return 1
+        else if (majorVersion < o.majorVersion)
+            return -1
+
+        if (minorVersion > o.minorVersion)
+            return 1
+        else if (minorVersion < o.minorVersion)
+            return -1
+
+        if (microVersion > o.microVersion)
+            return 1
+        else if (microVersion < o.microVersion)
+            return -1
+
+        return qualifier.compareTo(o.qualifier)
+    }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        OrientDBVersion that = (OrientDBVersion) o
+
+        if (majorVersion != that.majorVersion) return false
+        if (microVersion != that.microVersion) return false
+        if (minorVersion != that.minorVersion) return false
+        if (qualifier != that.qualifier) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = majorVersion
+        result = 31 * result + minorVersion
+        result = 31 * result + microVersion
+        result = 31 * result + (qualifier != null ? qualifier.hashCode() : 0)
+        return result
+    }
+
+    @Override
+    public java.lang.String toString() {
+        return "OrientDBVersion{" +
+                "majorVersion=" + majorVersion +
+                ", minorVersion=" + minorVersion +
+                ", microVersion=" + microVersion +
+                ", qualifier='" + qualifier + '\'' +
+                '}';
+    }
+}
