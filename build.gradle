@@ -332,6 +332,15 @@ task cloneSourcesIfNeeded(dependsOn: 'cleanup') << {
         runShellScript(srcPath.parentFile, "git clone ${REMOTE_URL}")
 }
 
+task pull() << {
+    runShellScript(srcPath.parentFile, "git pull ${REMOTE_URL}")
+}
+
+
+task cloneRepo() << {
+    runShellScript(srcPath.parentFile, "git clone ${REMOTE_URL}")
+}
+
 private void runShellScript(File dir, String command) {
     String[] cmd = ["sh", "-c", "cd ${dir.absolutePath} && ${command}"];
     Process p = Runtime.getRuntime().exec(cmd);
