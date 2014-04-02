@@ -15,7 +15,7 @@ def DISTRIBUITION_DIR = new File("workspace/distribution")
 def TEST_DB_DIR = new File("workspace/distribution/database")
 def LIB_DIR = new File("workspace/distribution/lib")
 
-def minimalVersion = "1.7-rc2"
+def minimalVersion = "1.7"
 def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
 
 /*
@@ -355,18 +355,18 @@ private boolean isVersionTag(tagName) {
     if (tagName.isInteger())
         return true
 
-    qualifierIndex = tagName.indexOf('-')
+    def qualifierIndex = tagName.indexOf('-')
 
-    firstIndex = tagName.indexOf('.')
+    def firstIndex = tagName.indexOf('.')
     if (firstIndex <= 0)
         return false;
 
-    firsIndexPart = tagName.substring(0, firstIndex)
+    def firsIndexPart = tagName.substring(0, firstIndex)
     if (!firsIndexPart.isInteger())
         return false
 
-    secondIndex = tagName.indexOf('.', firstIndex + 1);
-    secondIndexPart = null
+    def secondIndex = tagName.indexOf('.', firstIndex + 1);
+    def secondIndexPart = null
 
     if (secondIndex > 0)
         secondIndexPart = tagName.substring(firstIndex + 1, secondIndex)
@@ -381,7 +381,7 @@ private boolean isVersionTag(tagName) {
     if (secondIndex < 0)
         return true
 
-    thirdIndexPart = null
+    def thirdIndexPart = null
     if (qualifierIndex > 0)
         thirdIndexPart = tagName.substring(secondIndex + 1, qualifierIndex)
     else
@@ -450,6 +450,15 @@ final class OrientDBVersion implements Comparable<OrientDBVersion> {
             return 1
         else if (microVersion < o.microVersion)
             return -1
+
+        if (qualifier == null && o.qualifier !=null && !o.qualifier.isEmpty())
+            return 1;
+
+        if(qualifier.isEmpty() && o.qualifier !=null && !o.qualifier.isEmpty())
+            return 1;
+
+        if(qualifier != null && !qualifier.isEmpty() && (o.qualifier == null || o.qualifier.isEmpty()))
+            return -1;
 
         return qualifier.compareTo(o.qualifier)
     }
