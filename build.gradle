@@ -331,8 +331,11 @@ task cloneSourcesIfNeeded(dependsOn: 'cleanup') << {
     File srcPath = new File("workspace/orientdb")
     if (!srcPath.exists())
         runShellScript(srcPath.parentFile, "git clone ${REMOTE_URL}")
-    else
+    else {
+        runShellScript(ORIENTDB_SOURCE_DIR, "git checkout develop")
         runShellScript(ORIENTDB_SOURCE_DIR, "git pull")
+    }
+
 }
 
 task pull() << {
