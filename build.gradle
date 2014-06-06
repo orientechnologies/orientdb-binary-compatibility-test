@@ -34,6 +34,7 @@ def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
  * 6. do the same with snapshot.
  */
 task binaryCompatibilityTest(dependsOn: ['runCompatibilityTestsForReleasesVersions', 'runCompatibilityTestsForSnapshot']) << {
+    println "The latest SNAPSHOT version and following released versions were tested : ${versionsToTest} on binary compatibilty."
 }
 
 /*
@@ -192,7 +193,7 @@ task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsTo
 
     for (OrientDBVersion version in versionsToTest) {
         println "Create binary distribution for version ${version.tagName}"
-        runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${version.tagName}")
+        runShellScript(ORIENTDB_SOURCE_DIR, "git checkout tags/${version.tagName}")
         runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
 
         File distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}-distribution.dir/orientdb-community-${version.tagName}/lib")
@@ -330,6 +331,8 @@ task cloneSourcesIfNeeded(dependsOn: 'cleanup') << {
     File srcPath = new File("workspace/orientdb")
     if (!srcPath.exists())
         runShellScript(srcPath.parentFile, "git clone ${REMOTE_URL}")
+    else
+        runShellScript(ORIENTDB_SOURCE_DIR, "git pull")
 }
 
 task pull() << {
@@ -451,13 +454,13 @@ final class OrientDBVersion implements Comparable<OrientDBVersion> {
         else if (microVersion < o.microVersion)
             return -1
 
-        if (qualifier == null && o.qualifier !=null && !o.qualifier.isEmpty())
+        if (qualifier == null && o.qualifier != null && !o.qualifier.isEmpty())
             return 1;
 
-        if(qualifier.isEmpty() && o.qualifier !=null && !o.qualifier.isEmpty())
+        if (qualifier.isEmpty() && o.qualifier != null && !o.qualifier.isEmpty())
             return 1;
 
-        if(qualifier != null && !qualifier.isEmpty() && (o.qualifier == null || o.qualifier.isEmpty()))
+        if (qualifier != null && !qualifier.isEmpty() && (o.qualifier == null || o.qualifier.isEmpty()))
             return -1;
 
         return qualifier.compareTo(o.qualifier)
