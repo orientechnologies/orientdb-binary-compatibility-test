@@ -494,11 +494,9 @@ final class OrientDBVersion implements Comparable<OrientDBVersion> {
 
     @Override
     public java.lang.String toString() {
-        return "OrientDBVersion{" +
-                "majorVersion=" + majorVersion +
-                ", minorVersion=" + minorVersion +
-                ", microVersion=" + microVersion +
-                ", qualifier='" + qualifier + '\'' +
-                '}';
+        return "OrientDBVersion{" + majorVersion +
+                '.' + minorVersion +
+                '.' + microVersion +
+                '-' + qualifier + " }";
     }
 }
