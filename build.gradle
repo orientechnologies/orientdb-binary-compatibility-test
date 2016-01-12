@@ -1,4 +1,3 @@
-import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.Repository
 
 buildscript {
@@ -354,6 +353,7 @@ task cloneRepo() << {
 
 private void runShellScript(File dir, String command) {
     String[] cmd = ["sh", "-c", "cd ${dir.absolutePath} && ${command}"];
+    println cmd;
     Process p = Runtime.getRuntime().exec(cmd);
     p.consumeProcessOutput((Appendable) System.out, System.err)
     res = p.waitFor()
