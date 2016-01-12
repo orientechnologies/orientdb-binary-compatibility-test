@@ -353,7 +353,7 @@ task cloneRepo() << {
 
 private void runShellScript(File dir, String command) {
     String[] cmd = ["sh", "-c", "cd ${dir.absolutePath} && ${command}"];
-    println "sh", "-c", "cd ${dir.absolutePath} && ${command}";
+    println "sh -c cd ${dir.absolutePath} && ${command}";
     Process p = Runtime.getRuntime().exec(cmd);
     p.consumeProcessOutput((Appendable) System.out, System.err)
     res = p.waitFor()
