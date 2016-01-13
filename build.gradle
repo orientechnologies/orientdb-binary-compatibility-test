@@ -201,7 +201,9 @@ task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsTo
 
     for (OrientDBVersion version in versionsToTest) {
         println "Create binary distribution for version ${version.tagName}"
+        println "Reset the repo"
         runShellScript(ORIENTDB_SOURCE_DIR, "git reset --hard ")
+        println "Create binary distribution for version ${version.tagName}"
         runShellScript(ORIENTDB_SOURCE_DIR, "git checkout tags/${version.tagName}")
         runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
 
