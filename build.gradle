@@ -1,6 +1,5 @@
-import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.api.Git
-
+import org.eclipse.jgit.lib.Repository
 
 buildscript {
     repositories { mavenCentral() }
@@ -24,7 +23,6 @@ def ArrayList<String> versionsToSkip = new ArrayList<String>() {
         add("2.1-rc5")
     }
 }
-
 
 /*
  * Test to ensure binary compatibility between different releases of OrientDB.
@@ -215,7 +213,9 @@ task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsTo
             println "Libraries directory ${distributionLibDir.absolutePath} does not exist: try new path"
 
             distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}.dir/orientdb-community-${version.tagName}/lib")
-            throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
+
+            if (!distributionLibDir.exists())
+                throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
         }
 
         File versionLibDir = new File(libDir, "${version.tagName}")
