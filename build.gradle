@@ -209,8 +209,14 @@ task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsTo
 
         File distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}-distribution.dir/orientdb-community-${version.tagName}/lib")
 
-        if (!distributionLibDir.exists())
+
+        if (!distributionLibDir.exists()) {
+
+            println "Libraries directory ${distributionLibDir.absolutePath} does not exist: try new path"
+
+            distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}.dir/orientdb-community-${version.tagName}/lib")
             throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
+        }
 
         File versionLibDir = new File(libDir, "${version.tagName}")
         if (!versionLibDir.mkdir())
