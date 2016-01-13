@@ -238,10 +238,21 @@ task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSource
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
+    println "generate binary test db for ${versionsToTest.get(0).tagName}"
     runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${versionsToTest.get(0).tagName}")
 
     println "Creating database for binary compatibility tests"
-    runShellScript(ORIENTDB_SOURCE_DIR, "ant clean test-embedded -Dorientdb.test.env=ci ")
+
+    try {
+
+        runShellScript(ORIENTDB_SOURCE_DIR, "ant clean test-embedded -Dorientdb.test.env=ci ")
+    } catch (GradleScriptException e){
+
+        println "unable to run ant, fast forward to maven"
+
+        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded ; cd ..")
+
+    }
 
     File testDB = new File(ORIENTDB_SOURCE_DIR.parentFile, "releases/orientdb-community-${versionsToTest.get(0).tagName}/databases/demo")
     if (!testDB.exists())
