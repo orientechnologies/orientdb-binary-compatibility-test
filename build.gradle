@@ -251,7 +251,7 @@ task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSource
 
     try {
 
-        runShellScript(ORIENTDB_SOURCE_DIR, "ant clean test-embedded -source 7 -Dorientdb.test.env=ci ")
+        runShellScript(ORIENTDB_SOURCE_DIR, "ant test-embedded -source 7 -Dorientdb.test.env=ci ")
     } catch (GradleScriptException e) {
 
         println "unable to run ant, fast forward to maven"
