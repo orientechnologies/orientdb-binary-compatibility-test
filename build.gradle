@@ -26,7 +26,6 @@ def ArrayList<String> versionsToSkip = new ArrayList<String>() {
         add("2.0-M3")
         add("2.0-rc1")
         add("2.0-rc2")
-
     }
 }
 
@@ -53,7 +52,7 @@ task binaryCompatibilityTest(dependsOn: ['runCompatibilityTestsForReleasesVersio
  * Compiles and run binary compatibility test on latest snapshot version of develop branch.
  * Sources of develop branch are not compiled here. It is done in other task.
  */
-task runCompatibilityTestsForSnapshot(dependsOn: ['generateBinaryTestsDatabase', 'createSnapshotDistribution']) << {
+task runCompatibilityTestsForSnapshot(dependsOn: ['createSnapshotDistribution']) << {
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
@@ -80,16 +79,16 @@ task runCompatibilityTestsForSnapshot(dependsOn: ['generateBinaryTestsDatabase',
 
     ant.javac(destdir: "${classesDir.absolutePath}", srcdir: "src", classpath: "${classpath}", includeAntRuntime: false)
 
-    File newDBDir = new File("workspace/distribution/exportedDatabase")
+    def File newDBDir = new File("workspace/distribution/exportedDatabase")
     if (newDBDir.exists())
         if (!newDBDir.deleteDir())
             throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
 
 
-    Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
+    def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
             "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
     process.consumeProcessOutput((Appendable) System.out, System.err)
-    result = process.waitFor()
+    def result = process.waitFor()
     if (result != 0)
         throw new GradleScriptException("Binary compatibility test for snapshot version was failed", null)
 }
@@ -98,7 +97,7 @@ task runCompatibilityTestsForSnapshot(dependsOn: ['generateBinaryTestsDatabase',
  * Compiles and run binary compatibility test on all released versions.
  * Sources of this versions are not compiled here. It is done in other task.
  */
-task runCompatibilityTestsForReleasesVersions(dependsOn: ['generateBinaryTestsDatabase', 'createReleasedVersionsDistributions']) << {
+task runCompatibilityTestsForReleasesVersions(dependsOn: ['createReleasedVersionsDistributions']) << {
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
@@ -127,16 +126,16 @@ task runCompatibilityTestsForReleasesVersions(dependsOn: ['generateBinaryTestsDa
 
         ant.javac(destdir: "${classesDir.absolutePath}", srcdir: "src", classpath: "${classpath}", includeAntRuntime: false)
 
-        File newDBDir = new File("workspace/distribution/exportedDatabase")
+        def File newDBDir = new File("workspace/distribution/exportedDatabase")
         if (newDBDir.exists())
             if (!newDBDir.deleteDir())
                 throw new GradleScriptException("Can not delete directory ${classesDir.absolutePath}", null)
 
 
-        Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
+        def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
                 "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
         process.consumeProcessOutput((Appendable) System.out, System.err)
-        result = process.waitFor()
+        def result = process.waitFor()
         if (result != 0)
             throw new GradleScriptException("Binary compatibility test for version ${version.tagName} was failed", null)
     }
@@ -145,7 +144,7 @@ task runCompatibilityTestsForReleasesVersions(dependsOn: ['generateBinaryTestsDa
 /*
  * Create OrientDB distribution for latest version from develop branch.
  */
-task createSnapshotDistribution(dependsOn: ['cleanup', 'fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+task createSnapshotDistribution(dependsOn: ['generateBinaryTestsDatabase']) << {
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
@@ -156,7 +155,7 @@ task createSnapshotDistribution(dependsOn: ['cleanup', 'fetchVersionsToTest', 'c
     runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
 
     File distributionTarget = new File(ORIENTDB_SOURCE_DIR, "distribution/target")
-    distributionDirList = distributionTarget.listFiles(new FileFilter() {
+    def distributionDirList = distributionTarget.listFiles(new FileFilter() {
         boolean accept(File pathname) {
             return pathname.name.startsWith("orientdb-community-") && pathname.name.endsWith("-distribution.dir")
         }
@@ -174,13 +173,13 @@ task createSnapshotDistribution(dependsOn: ['cleanup', 'fetchVersionsToTest', 'c
     if (distributionDirList == null || distributionDirList.length != 1)
         throw new GradleScriptException("Can not find distribution directory for latest snapshot", null)
 
-    File distributionLibDir = new File(distributionDirList[0], "lib")
+    def File distributionLibDir = new File(distributionDirList[0], "lib")
 
     if (!DISTRIBUITION_DIR.exists())
         throw new GradleScriptException("Libraries directory ${distributionLibDir.absolutePath} does not exist", null)
 
-    File snapshotLibDir = new File(LIB_DIR, "SNAPSHOT")
-    if (!snapshotLibDir.mkdir())
+    def File snapshotLibDir = new File(LIB_DIR, "SNAPSHOT")
+    if (!snapshotLibDir.mkdirs())
         throw new GradleScriptException("Can not create directory ${snapshotLibDir.absolutePath}", null)
 
     ant.copy(todir: snapshotLibDir.absolutePath) {
@@ -195,7 +194,7 @@ task createSnapshotDistribution(dependsOn: ['cleanup', 'fetchVersionsToTest', 'c
 /*
  * Create OrientDB distributions for all released versions.
  */
-task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+task createReleasedVersionsDistributions(dependsOn: ['generateBinaryTestsDatabase']) << {
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
@@ -240,7 +239,7 @@ task createReleasedVersionsDistributions(dependsOn: ['cleanup', 'fetchVersionsTo
  * Run "ant clean test-plocal" tasks on first OrientDB release (which is chosen to be tested) to create test database which will be used
  * for binary compatibility tests.
  */
-task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
+task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', 'cloneSourcesIfNeeded']) << {
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
@@ -257,7 +256,7 @@ task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSource
 
         println "unable to run ant, fast forward to maven"
 
-        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded ; cd ..")
+        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded -Dorientdb.test.env=ci ; cd ..")
 
     }
 
@@ -286,9 +285,14 @@ task generateBinaryTestsDatabase(dependsOn: ['fetchVersionsToTest', 'cloneSource
 
 task cleanup << {
     File workspaceDir = new File("workspace")
-    if (!workspaceDir.exists())
-        if (!workspaceDir.mkdir())
-            throw new GradleScriptException("Can not delete directory ${workspaceDir.absolutePath}", null)
+    if(workspaceDir.exists()) {
+      if(!workspaceDir.deleteDir()) {
+        throw new GradleScriptException("Can not delete directory ${workspaceDir.absolutePath}", null)
+      }
+    }
+
+    if (!workspaceDir.mkdir())
+       throw new GradleScriptException("Can not create directory ${workspaceDir.absolutePath}", null)
 
     File releasesDir = new File("workspace/releases")
     if (releasesDir.exists())
