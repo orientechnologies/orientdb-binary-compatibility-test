@@ -157,7 +157,7 @@ task createSnapshotDistribution(dependsOn: ['generateBinaryTestsDatabase']) << {
     File distributionTarget = new File(ORIENTDB_SOURCE_DIR, "distribution/target")
     def distributionDirList = distributionTarget.listFiles(new FileFilter() {
         boolean accept(File pathname) {
-            return pathname.name.startsWith("orientdb-community-") && pathname.name.endsWith("-distribution.dir")
+            return pathname.name.startsWith("orientdb-community-") && pathname.name.endsWith(".dir")
         }
     })
 
@@ -285,14 +285,14 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
 
 task cleanup << {
     File workspaceDir = new File("workspace")
-    if(workspaceDir.exists()) {
-      if(!workspaceDir.deleteDir()) {
-        throw new GradleScriptException("Can not delete directory ${workspaceDir.absolutePath}", null)
-      }
+    if (workspaceDir.exists()) {
+        if (!workspaceDir.deleteDir()) {
+            throw new GradleScriptException("Can not delete directory ${workspaceDir.absolutePath}", null)
+        }
     }
 
     if (!workspaceDir.mkdir())
-       throw new GradleScriptException("Can not create directory ${workspaceDir.absolutePath}", null)
+        throw new GradleScriptException("Can not create directory ${workspaceDir.absolutePath}", null)
 
     File releasesDir = new File("workspace/releases")
     if (releasesDir.exists())
