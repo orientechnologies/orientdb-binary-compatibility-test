@@ -260,7 +260,7 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
 
     }
 
-    File testDB = new File(ORIENTDB_SOURCE_DIR.parentFile, "releases/orientdb-community-${versionsToTest.get(0).tagName}/databases/demo")
+    File testDB = new File(ORIENTDB_SOURCE_DIR.parentFile, "releases/orientdb-community-${versionsToTest.get(0).tagName}/databases/GratefulDeadConcerts")
     if (!testDB.exists())
         throw new GradleScriptException("Test database can not be found under the path ${testDB.absolutePath}", null)
 
