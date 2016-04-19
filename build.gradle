@@ -15,6 +15,8 @@ def DISTRIBUITION_DIR = new File("workspace/distribution")
 def TEST_DB_DIR = new File("workspace/distribution/database")
 def LIB_DIR = new File("workspace/distribution/lib")
 
+def File EXPORTED_DB_PATH = new File("workspace/distribution/db.export.gz")
+
 def minimalVersion = "1.7"
 def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
 def ArrayList<String> versionsToSkip = new ArrayList<String>() {
@@ -56,7 +58,6 @@ task runCompatibilityTestsForSnapshot(dependsOn: ['createSnapshotDistribution'])
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
-    def File exportedDbPath = new File("workspace/distribution/db.export.gz")
     println "Start binary compatibility test for latest snapshot"
 
     def File classesDir = new File("workspace/distribution/classes")
@@ -86,7 +87,7 @@ task runCompatibilityTestsForSnapshot(dependsOn: ['createSnapshotDistribution'])
 
 
     def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
-            "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+            "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
     process.consumeProcessOutput((Appendable) System.out, System.err)
     def result = process.waitFor()
     if (result != 0)
@@ -133,7 +134,7 @@ task runCompatibilityTestsForReleasesVersions(dependsOn: ['createReleasedVersion
 
 
         def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
-                "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${exportedDbPath.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+                "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
         process.consumeProcessOutput((Appendable) System.out, System.err)
         def result = process.waitFor()
         if (result != 0)
@@ -249,38 +250,37 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
     println "Creating database for binary compatibility tests"
 
     try {
-
-
         runShellScript(ORIENTDB_SOURCE_DIR, "ant test-embedded -Dproject.target-comp=1.7 -Dproject.source-comp=1.7  -Dant.build.javac.source=1.7 -Dant.build.javac.target=1.7 -Dorientdb.test.env=ci ")
     } catch (GradleScriptException e) {
 
         println "unable to run ant, fast forward to maven"
 
-        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded -Dorientdb.test.env=ci ; cd ..")
-
+        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded -Dorientdb.test.env=ci -DexportFilePath=${EXPORTED_DB_PATH.absolutePath} ; cd ..")
     }
 
-    File testDB = new File(ORIENTDB_SOURCE_DIR.parentFile, "releases/orientdb-community-${versionsToTest.get(0).tagName}/databases/GratefulDeadConcerts")
+    File testDB = new File(ORIENTDB_SOURCE_DIR, "tests/databases/demo")
     if (!testDB.exists())
         throw new GradleScriptException("Test database can not be found under the path ${testDB.absolutePath}", null)
 
-    File databaseDir = new File(DISTRIBUITION_DIR, "database")
-    if (!databaseDir.mkdir())
-        throw new GradleScriptException("Can create directory ${databaseDir.absolutePath}", null)
+    if (!TEST_DB_DIR.mkdir())
+        throw new GradleScriptException("Can create directory ${TEST_DB_DIR.absolutePath}", null)
 
     println "Copy tests database in distribution directory ${databaseDir.absolutePath}"
     ant.copy(todir: databaseDir.absolutePath) {
-        fileset(dir: testDB.absolutePath)
+        fileset(dir: TEST_DB_DIR.absolutePath)
     }
 
-    println "Copy exported tests database in  distribution directory ${databaseDir.absolutePath}"
-    File exportedDb = new File(ORIENTDB_SOURCE_DIR, "tests/target/db.export.gz")
-    if (!exportedDb.exists())
-        throw new GradleScriptException("File ${exportedDb.absolutePath} does not exist", null)
-
-    ant.copy(todir: DISTRIBUITION_DIR.absolutePath) {
-        fileset(file: exportedDb.absolutePath)
-    }
+	if (!EXPORTED_DB_PATH.exists()) {
+	  println "Copy exported tests database in distribution directory ${EXPORTED_DB_PATH.absolutePath}"
+	  
+	  File exportedDb = new File(ORIENTDB_SOURCE_DIR, "tests/target/db.export.gz");
+	  if(!exportedDb.exists())
+	      throw new GradleScriptException("File ${exportedDb.absolutePath} does not exist", null)
+		  
+	   ant.copy(todir: EXPORTED_DB_PATH.absolutePath) {
+        fileset(dir: exportedDb.absolutePath)
+       }	  
+	}
 }
 
 task cleanup << {
