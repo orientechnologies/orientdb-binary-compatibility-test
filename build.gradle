@@ -214,6 +214,8 @@ task createReleasedVersionsDistributions(dependsOn: ['generateBinaryTestsDatabas
         runShellScript(ORIENTDB_SOURCE_DIR, "git checkout tags/${version.tagName}")
 
         // apply CI tests patch
+        runShellScript(ORIENTDB_SOURCE_DIR, "git config user.email \"jenkins@orientdb-binary-compatibility-test.com\"")
+        runShellScript(ORIENTDB_SOURCE_DIR, "git config user.name \"Jenkins of Binary Compatibility\"")
         if (version.majorVersion == 2 && version.minorVersion == 2 && version.microVersion == 0 && "rc1".equals(version.qualifier))
             runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick 5a252db3fc98fde3fb09313b4e1ac856e15c6388")
 
@@ -258,6 +260,8 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
 
     // patch CI tests, we are targeting only 2.1.x and 2.2.x series, 2.1.x has CI patches starting after 2.1.16 version,
     // 2.2.x has CI patches starting after 2.2.0-rc1.
+    runShellScript(ORIENTDB_SOURCE_DIR, "git config user.email \"jenkins@orientdb-binary-compatibility-test.com\"")
+    runShellScript(ORIENTDB_SOURCE_DIR, "git config user.name \"Jenkins of Binary Compatibility\"")
     if (version.majorVersion == 2 && version.minorVersion == 1 && version.microVersion <= 16) {
         runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick 927b54516327cc901ee832527b69f261a9d61300")
         runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick cb72430b67339c10bd851c0558f4e9768e287e90")
