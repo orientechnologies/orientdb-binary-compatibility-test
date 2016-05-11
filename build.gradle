@@ -21,6 +21,9 @@ def minimalVersion = "1.7"
 def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
 def ArrayList<String> versionsToSkip = new ArrayList<String>() {
     {
+        add("2.2.0-beta2")
+        add("2.2.0-beta")
+        add("2.1-rc3")
         add("2.1-rc4")
         add("2.1-rc5")
         add("2.0-M1")
@@ -87,7 +90,7 @@ task runCompatibilityTestsForSnapshot(dependsOn: ['createSnapshotDistribution'])
 
 
     def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
-            "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+            "-Dindex.ignoreNullValuesDefault=true com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
     process.consumeProcessOutput((Appendable) System.out, System.err)
     def result = process.waitFor()
     if (result != 0)
@@ -134,7 +137,7 @@ task runCompatibilityTestsForReleasesVersions(dependsOn: ['createReleasedVersion
 
 
         def Process process = ("${System.getProperty('java.home')}/bin/java -classpath ${classpath} " +
-                "com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
+                "-Dindex.ignoreNullValuesDefault=true com.orientechnologies.DatabaseBinaryCompatibilityTest plocal:${TEST_DB_DIR.absolutePath} ${EXPORTED_DB_PATH.absolutePath} plocal:${newDBDir.absolutePath}").execute()
         process.consumeProcessOutput((Appendable) System.out, System.err)
         def result = process.waitFor()
         if (result != 0)
@@ -209,6 +212,11 @@ task createReleasedVersionsDistributions(dependsOn: ['generateBinaryTestsDatabas
         runShellScript(ORIENTDB_SOURCE_DIR, "git reset --hard ")
         println "Create binary distribution for version ${version.tagName}"
         runShellScript(ORIENTDB_SOURCE_DIR, "git checkout tags/${version.tagName}")
+
+        // apply CI tests patch
+        if (version.majorVersion == 2 && version.minorVersion == 2 && version.microVersion == 0 && "rc1".equals(version.qualifier))
+            runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick 5a252db3fc98fde3fb09313b4e1ac856e15c6388")
+
         runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean package -DskipTests")
 
         File distributionLibDir = new File(ORIENTDB_SOURCE_DIR, "distribution/target/orientdb-community-${version.tagName}-distribution.dir/orientdb-community-${version.tagName}/lib")
@@ -244,30 +252,54 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
     if (versionsToTest.isEmpty())
         throw new StopExecutionException("No versions to test")
 
-    println "generate binary test db for ${versionsToTest.get(0).tagName}"
-    runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${versionsToTest.get(0).tagName}")
+    def version = versionsToTest.get(0)
+    println "generate binary test db for ${version.tagName}"
+    runShellScript(ORIENTDB_SOURCE_DIR, "git checkout ${version.tagName}")
+
+    // patch CI tests, we are targeting only 2.1.x and 2.2.x series, 2.1.x has CI patches starting after 2.1.16 version,
+    // 2.2.x has CI patches starting after 2.2.0-rc1.
+    if (version.majorVersion == 2 && version.minorVersion == 1 && version.microVersion <= 16) {
+        runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick 927b54516327cc901ee832527b69f261a9d61300")
+        runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick cb72430b67339c10bd851c0558f4e9768e287e90")
+    } else if (version.majorVersion == 2 && version.minorVersion == 2 && version.microVersion == 0 &&
+            "rc1".equals(version.qualifier)) {
+        runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick cb72430b67339c10bd851c0558f4e9768e287e90")
+        runShellScript(ORIENTDB_SOURCE_DIR, "git cherry-pick 5a252db3fc98fde3fb09313b4e1ac856e15c6388")
+    }
 
     println "Creating database for binary compatibility tests"
 
     try {
         runShellScript(ORIENTDB_SOURCE_DIR, "ant test-embedded -Dproject.target-comp=1.7 -Dproject.source-comp=1.7  -Dant.build.javac.source=1.7 -Dant.build.javac.target=1.7 -Dorientdb.test.env=ci ")
+
+        File testDB = new File(ORIENTDB_SOURCE_DIR, "tests/target/test-db/demo")
+        if (!testDB.exists()) {
+            println "seem like ant build made nothing, switching to maven"
+            try {
+                runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean install -DskipTests")
+                runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean test -Ptest-embedded -Dorientdb.test.env=ci -Dindex.ignoreNullValuesDefault=true -DexportFilePath=${EXPORTED_DB_PATH.absolutePath} ; cd ..")
+            } catch (GradleScriptException e) {
+                println "maven build failed, giving up"
+            }
+        }
     } catch (GradleScriptException e) {
 
         println "unable to run ant, fast forward to maven"
 
-        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean  install -Ptest-embedded -Dorientdb.test.env=ci -DexportFilePath=${EXPORTED_DB_PATH.absolutePath} ; cd ..")
+        runShellScript(ORIENTDB_SOURCE_DIR, "mvn clean install -DskipTests")
+        runShellScript(ORIENTDB_SOURCE_DIR, "cd tests ; mvn clean test -Ptest-embedded -Dorientdb.test.env=ci -Dindex.ignoreNullValuesDefault=true -DexportFilePath=${EXPORTED_DB_PATH.absolutePath} ; cd ..")
     }
 
-    File testDB = new File(ORIENTDB_SOURCE_DIR, "tests/databases/demo")
+    File testDB = new File(ORIENTDB_SOURCE_DIR, "tests/target/test-db/demo")
     if (!testDB.exists())
         throw new GradleScriptException("Test database can not be found under the path ${testDB.absolutePath}", null)
 
     if (!TEST_DB_DIR.mkdir())
         throw new GradleScriptException("Can create directory ${TEST_DB_DIR.absolutePath}", null)
 
-    println "Copy tests database in distribution directory ${databaseDir.absolutePath}"
-    ant.copy(todir: databaseDir.absolutePath) {
-        fileset(dir: TEST_DB_DIR.absolutePath)
+    println "Copy tests database in distribution directory ${testDB.absolutePath}"
+    ant.copy(todir: TEST_DB_DIR.absolutePath) {
+        fileset(dir: testDB.absolutePath)
     }
 
 	if (!EXPORTED_DB_PATH.exists()) {
@@ -276,10 +308,10 @@ task generateBinaryTestsDatabase(dependsOn: ['cleanup', 'fetchVersionsToTest', '
 	  File exportedDb = new File(ORIENTDB_SOURCE_DIR, "tests/target/db.export.gz");
 	  if(!exportedDb.exists())
 	      throw new GradleScriptException("File ${exportedDb.absolutePath} does not exist", null)
-		  
-	   ant.copy(todir: EXPORTED_DB_PATH.absolutePath) {
-        fileset(dir: exportedDb.absolutePath)
-       }	  
+
+	   ant.copy(tofile: EXPORTED_DB_PATH.absolutePath) {
+           fileset(file: exportedDb.absolutePath)
+       }
 	}
 }
 
