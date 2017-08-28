@@ -38,6 +38,7 @@ public class DatabaseBinaryCompatibilityTest {
 			});
 
 			dbImport.setPreserveRids(true);
+			dbImport.setDeleteRIDMapping(false);
 			dbImport.importDatabase();
 
 			dbImport.close();
