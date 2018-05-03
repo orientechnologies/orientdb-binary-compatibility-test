@@ -21,6 +21,8 @@ def minimalVersion = "1.7"
 def ArrayList<OrientDBVersion> versionsToTest = new ArrayList<OrientDBVersion>()
 def ArrayList<String> versionsToSkip = new ArrayList<String>() {
     {
+	    add("2.2.0")
+	    add("2.2.0-rc1")
         add("2.2.0-beta2")
         add("2.2.0-beta")
         add("2.1-rc3")
